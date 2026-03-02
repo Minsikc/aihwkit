@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -97,7 +96,7 @@ class WarAndPeaceDataset(Dataset):
 
         # Read the text file
         file_path = os.path.join(path, WP_TRAIN_FNAME)
-        with open(file_path, "r", encoding="iso-8859-1") as file:
+        with open(file_path, encoding="iso-8859-1") as file:
             text = file.read()
         chars = sorted(list(set(text)))
 
@@ -118,7 +117,7 @@ class WarAndPeaceDataset(Dataset):
             )
         else:
             file_path = os.path.join(path, WP_TEST_FNAME)
-            with open(file_path, "r", encoding="iso-8859-1") as file:
+            with open(file_path, encoding="iso-8859-1") as file:
                 text = file.read()
             print(
                 "Loaded test dataset: ",
@@ -214,7 +213,7 @@ class AnalogLSTMLayer(AnalogSequential):
 
         return out
 
-    def init_hidden(self, batch_size: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    def init_hidden(self, batch_size: int) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Initialize the hidden states."""
         return self.lstm.get_zero_state(batch_size)
 
@@ -375,7 +374,7 @@ def main():
 
     if args.file_name is not None:
         print("Loading state dict from: ", (args.file_name + ".ckpt"))
-        model.load_state_dict(load((path_file + ".ckpt")))
+        model.load_state_dict(load(path_file + ".ckpt"))
 
         with open((path_file + ".csv"), "rb") as file:
             epoch_losses = np.loadtxt(file.read, delimiter=",")
@@ -425,11 +424,7 @@ def main():
         )
 
         print(
-            "Epoch {} - Train loss: {:.8f} - Test loss: {:.8f}".format(
-                epoch_number,
-                train_total_loss / len(train_data.dataset),
-                test_total_loss / len(test_data.dataset),
-            )
+            f"Epoch {epoch_number} - Train loss: {train_total_loss / len(train_data.dataset):.8f} - Test loss: {test_total_loss / len(test_data.dataset):.8f}"
         )
 
         np.savetxt((path_file + ".csv"), epoch_losses, delimiter=",")

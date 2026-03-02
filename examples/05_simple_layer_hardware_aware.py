@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -84,23 +83,19 @@ for epoch in range(100):
 
     opt.step()
 
-    print("Loss error: {:.16f}".format(loss))
+    print(f"Loss error: {loss:.16f}")
 
 model.eval()
 
 # Do inference with drift.
 pred_before = model(x)
 
-print("Correct value:\t {}".format(y.detach().cpu().numpy().flatten()))
-print("Prediction after training:\t {}".format(pred_before.detach().cpu().numpy().flatten()))
+print(f"Correct value:\t {y.detach().cpu().numpy().flatten()}")
+print(f"Prediction after training:\t {pred_before.detach().cpu().numpy().flatten()}")
 
 for t_inference in [0.0, 1.0, 20.0, 1000.0, 1e5]:
     model.drift_analog_weights(t_inference)
     pred_drift = model(x)
     print(
-        "Prediction after drift (t={}, correction={:1.3f}):\t {}".format(
-            t_inference,
-            next(model.analog_tiles()).alpha.cpu().numpy(),
-            pred_drift.detach().cpu().numpy().flatten(),
-        )
+        f"Prediction after drift (t={t_inference}, correction={next(model.analog_tiles()).alpha.cpu().numpy():1.3f}):\t {pred_drift.detach().cpu().numpy().flatten()}"
     )

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -25,7 +24,7 @@ from .enums import PulseType
 class UpdateParameters(_PrintableMixin):
     """Parameter that modify the update behaviour of a pulsed device."""
 
-    bindings_class: ClassVar[Optional[Union[str, Type]]] = "AnalogTileUpdateParameter"
+    bindings_class: ClassVar[str | type | None] = "AnalogTileUpdateParameter"
     bindings_module: ClassVar[str] = "devices"
 
     desired_bl: int = 31

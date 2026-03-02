@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -40,7 +39,7 @@ else:
 
 def read_from_file(
     filename: str, from_pulse_response: bool = True, n_segments: int = 10, skip_rows: int = 0
-) -> Tuple[List[float], List[float], float, float, float, List[float], List[float]]:
+) -> tuple[list[float], list[float], float, float, float, list[float], list[float]]:
     """Read the update steps from file and convert to the required device input format.
 
     Here the CSV file has two columns, one for the up and the second

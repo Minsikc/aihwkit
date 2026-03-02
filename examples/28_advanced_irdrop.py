@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -67,7 +66,7 @@ SEGMENTS = 32
 USE_CUDA = True
 
 
-def rpu_config_modifications(rpu_config: Type[RPUConfigBase]) -> Type[RPUConfigBase]:
+def rpu_config_modifications(rpu_config: type[RPUConfigBase]) -> type[RPUConfigBase]:
     """
     Ensures same rpu_config modifications are made to each model
     for fair comparison.

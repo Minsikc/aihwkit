@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -157,12 +156,12 @@ def train(model, train_set):
 
             total_loss += loss.item()
 
-        print("Epoch {} - Training loss: {:.16f}".format(epoch_number, total_loss / len(train_set)))
+        print(f"Epoch {epoch_number} - Training loss: {total_loss / len(train_set):.16f}")
 
         # Decay learning rate if needed.
         scheduler.step()
 
-    print("\nTraining Time (s) = {}".format(time() - time_init))
+    print(f"\nTraining Time (s) = {time() - time_init}")
 
 
 def test_evaluation(model, val_set):
@@ -190,8 +189,8 @@ def test_evaluation(model, val_set):
         total_images += labels.size(0)
         predicted_ok += (predicted == labels).sum().item()
 
-    print("\nNumber Of Images Tested = {}".format(total_images))
-    print("Model Accuracy = {}".format(predicted_ok / total_images))
+    print(f"\nNumber Of Images Tested = {total_images}")
+    print(f"Model Accuracy = {predicted_ok / total_images}")
 
 
 if __name__ == "__main__":

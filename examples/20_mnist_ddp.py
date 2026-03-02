@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -205,7 +204,7 @@ def train(model, train_set, opt_state_dict=None):
 
         if rank == 0:
             train_loss = total_loss.item() / total_images.item()
-            print("Epoch {} - Training loss: {:.16f}".format(epoch_number, train_loss))
+            print(f"Epoch {epoch_number} - Training loss: {train_loss:.16f}")
 
         # save checkpoint
         dist.barrier()
@@ -223,7 +222,7 @@ def train(model, train_set, opt_state_dict=None):
 
     if rank == 0:
         avg_train_time = cat(total_time, 0).mean()
-        print("\nAverage Training Time (s) = {}".format(avg_train_time))
+        print(f"\nAverage Training Time (s) = {avg_train_time}")
 
 
 def test_evaluation(model, val_set):
@@ -262,8 +261,8 @@ def test_evaluation(model, val_set):
 
     if rank == 0:
         acc = cat(acc_list, 0).mean()
-        print("\nNumber Of Images Tested = {}".format(total_images))
-        print("Model Accuracy = {}".format(acc))
+        print(f"\nNumber Of Images Tested = {total_images}")
+        print(f"Model Accuracy = {acc}")
 
 
 def main():

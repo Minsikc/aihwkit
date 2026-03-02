@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -108,7 +107,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
             )
             self.ensure_shared_weights()
 
-    def get_forward_out_bound(self) -> Optional[float]:
+    def get_forward_out_bound(self) -> float | None:
         """Helper for getting the output bound to correct the
         gradients using the AnalogFunction.
         """
@@ -135,7 +134,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
 
     @no_grad()
     def cuda(
-        self, device: Optional[Union[torch_device, str, int]] = None
+        self, device: torch_device | str | int | None = None
     ) -> "SimulatorTileWrapper":
         """Return a copy of the  tile in CUDA memory.
 
@@ -176,7 +175,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
         return self
 
     @no_grad()
-    def ensure_shared_weights(self, shared_weights: Optional[Tensor] = None) -> None:
+    def ensure_shared_weights(self, shared_weights: Tensor | None = None) -> None:
         """Ensure that the shared_weights is set properly.
 
         Caution:
@@ -191,7 +190,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
             self.tile.set_shared_weights(self.shared_weights.data)  # type: ignore
 
     @no_grad()
-    def set_delta_weights(self, delta_weights: Optional[Tensor] = None) -> None:
+    def set_delta_weights(self, delta_weights: Tensor | None = None) -> None:
         """Set the weight grad tensor and set the update to.
 
         No-op if shared weights is not used.
@@ -249,7 +248,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
 
     def _get_extra_parameters(
         self, pre_key: str, full_key: bool = False
-    ) -> Tuple[Union[Dict[Tuple[str, str], Tensor], Dict[str, Tensor]], Dict[str, Any]]:
+    ) -> tuple[dict[tuple[str, str], Tensor] | dict[str, Tensor], dict[str, Any]]:
         """Get the sub keys in the extra starting with pre_key."""
         extra = self.tile.dump_extra()
         if full_key:
@@ -267,7 +266,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
 
         return dic, extra
 
-    def _set_extra_parameters(self, pre_key: str, dic: Dict[str, Any]) -> None:
+    def _set_extra_parameters(self, pre_key: str, dic: dict[str, Any]) -> None:
         """Set the sub keys in the extra starting with pre_key.
 
         Raises:
@@ -290,7 +289,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
 
         self.load_extra(extra)
 
-    def get_forward_parameters(self) -> Dict[str, Tensor]:
+    def get_forward_parameters(self) -> dict[str, Tensor]:
         """Get the additional parameters generated for the forward pass.
 
         Returns:
@@ -299,7 +298,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
         return self._get_extra_parameters("fb_pass.fwd.")[0]  # type: ignore
 
     def set_forward_parameters(
-        self, dic: Optional[Dict[str, Tensor]] = None, **kwargs: Dict[str, Tensor]
+        self, dic: dict[str, Tensor] | None = None, **kwargs: dict[str, Tensor]
     ) -> None:
         """Set the additional parameters generated for the forward pass.
 
@@ -311,7 +310,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
             dic = kwargs
         return self._set_extra_parameters("fb_pass.fwd.", dic)
 
-    def get_backward_parameters(self) -> Dict[str, Tensor]:
+    def get_backward_parameters(self) -> dict[str, Tensor]:
         """Get the additional parameters generated for the backward pass.
 
         Returns:
@@ -320,7 +319,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
         return self._get_extra_parameters("fb_pass.bwd.")[0]  # type: ignore
 
     def set_backward_parameters(
-        self, dic: Optional[Dict[str, Tensor]], **kwargs: Dict[str, Tensor]
+        self, dic: dict[str, Tensor] | None, **kwargs: dict[str, Tensor]
     ) -> None:
         """Set the additional parameters generated for the backward pass.
 
@@ -419,7 +418,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
         """
         self.tile.set_verbosity_level(verbose)
 
-    def dump_extra(self) -> Optional[Dict[str, Any]]:
+    def dump_extra(self) -> dict[str, Any] | None:
         """Dumps any extra states / attributed necessary for
         checkpointing.
 
@@ -428,7 +427,7 @@ class RPUCudaSimulatorTileWrapper(SimulatorTileWrapper):
         """
         return self.tile.dump_extra()
 
-    def load_extra(self, extra: Dict[str, Any], strict: bool = False) -> None:
+    def load_extra(self, extra: dict[str, Any], strict: bool = False) -> None:
         """Load any extra states / attributed necessary for
         loading from checkpoint.
 

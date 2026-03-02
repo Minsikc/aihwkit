@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -104,7 +103,7 @@ custom_g_converter = CustomPairConductanceConverter(f_lst=[1.0],
                                                     invertibility_test=True)
 
 
-def plot_weights(g_converter: Type[BaseConductanceConverter],
+def plot_weights(g_converter: type[BaseConductanceConverter],
                  ideal_weights: Tensor,
                  drifted_weights: Tensor,
                  suffix: str = '') -> None:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -48,7 +47,7 @@ USE_TORCH_TRANSFER = False  # whether to use torch transfer implementation
 
 def get_rpu_config(
     algorithm: str = "ttv2", construction_seed: int = 123
-) -> Union[UnitCellRPUConfig, SingleRPUConfig]:
+) -> UnitCellRPUConfig | SingleRPUConfig:
     """Returns a rpu_config of a given type.
 
     Args:
@@ -131,7 +130,7 @@ def create_analog_tile(
     return analog_tile
 
 
-def run_updates(analog_tile: AnalogTile, x_data: Tensor, d_data: Tensor) -> Tuple[ArrayLike, Dict]:
+def run_updates(analog_tile: AnalogTile, x_data: Tensor, d_data: Tensor) -> tuple[ArrayLike, dict]:
     """Runs the update and returns the weight traces.
 
     Args:
@@ -163,7 +162,7 @@ def run_updates(analog_tile: AnalogTile, x_data: Tensor, d_data: Tensor) -> Tupl
     return w_trace, h_dic
 
 
-def plot_traces(w_trace: ArrayLike, h_trace_dic: Dict, h_names: Optional[List[str]] = None) -> None:
+def plot_traces(w_trace: ArrayLike, h_trace_dic: dict, h_names: list[str] | None = None) -> None:
     """Plots the weight traces.
 
     Args:

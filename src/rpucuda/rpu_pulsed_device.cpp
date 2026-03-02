@@ -13,6 +13,7 @@
 #include "rpu_pulsed_device.h"
 #include "math_util.h"
 #include "utility_functions.h"
+#include <iostream>
 #include <limits>
 #include <memory>
 
@@ -93,7 +94,10 @@ template class AbstractRPUDevice<half_t>;
 /******************************************************************************************/
 /* PulsedRPUDevice*/
 
-template <typename T> void PulsedRPUDevice<T>::initialize() { allocateContainers(); }
+template <typename T> void PulsedRPUDevice<T>::initialize() {
+  std::cout << "[DEBUG] PulsedRPUDevice updated!" << std::endl;
+  allocateContainers();
+}
 
 template <typename T> void PulsedRPUDevice<T>::allocateContainers() {
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -78,4 +77,4 @@ for epoch in range(500):
     loss.backward()
 
     opt.step()
-    print("{}: Loss error: {:.16f}".format(epoch, loss), end="\r" if epoch % 50 else "\n")
+    print(f"{epoch}: Loss error: {loss:.16f}", end="\r" if epoch % 50 else "\n")

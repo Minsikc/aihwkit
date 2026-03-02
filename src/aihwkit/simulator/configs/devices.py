@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 # (C) Copyright 2020, 2021, 2022, 2023, 2024 IBM. All Rights Reserved.
 #
@@ -43,7 +42,7 @@ class FloatingPointDevice(_PrintableMixin):
     Implements ideal devices forward/backward/update behavior.
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "FloatingPointTileParameter"
+    bindings_class: ClassVar[type | str | None] = "FloatingPointTileParameter"
     bindings_module: ClassVar[str] = "devices"
 
     diffusion: float = 0.0
@@ -144,7 +143,7 @@ class PulsedDevice(_PrintableMixin):
 
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "PulsedResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "PulsedResistiveDeviceParameter"
     bindings_module: ClassVar[str] = "devices"
 
     construction_seed: int = 0
@@ -310,7 +309,7 @@ class IdealDevice(_PrintableMixin):
     forward/backward might still have a non-ideal ADC or noise added.
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "IdealResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "IdealResistiveDeviceParameter"
     bindings_module: ClassVar[str] = "devices"
 
     construction_seed: int = 0
@@ -372,7 +371,7 @@ class ConstantStepDevice(PulsedDevice):
     :class:`~PulsedDevice`.
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "ConstantStepResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "ConstantStepResistiveDeviceParameter"
 
 
 @dataclass
@@ -437,7 +436,7 @@ class LinearStepDevice(PulsedDevice):
         :class:`~PulsedDevice`.
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "LinearStepResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "LinearStepResistiveDeviceParameter"
 
     gamma_up: float = 0.0
     r"""The value of :math:`\gamma^+`.
@@ -550,7 +549,7 @@ class SoftBoundsDevice(PulsedDevice):
     parameters set to model soft bounds.
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "SoftBoundsResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "SoftBoundsResistiveDeviceParameter"
 
     mult_noise: bool = True
     """Whether to use multiplicative noise instead of additive cycle-to-cycle
@@ -711,7 +710,7 @@ class SoftBoundsReferenceDevice(PulsedDevice):
     """
 
     bindings_class: ClassVar[
-        Optional[Union[Type, str]]
+        type | str | None
     ] = "SoftBoundsReferenceResistiveDeviceParameter"
 
     mult_noise: bool = False
@@ -838,7 +837,7 @@ class ExpStepDevice(PulsedDevice):
 
     # pylint: disable=invalid-name
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "ExpStepResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "ExpStepResistiveDeviceParameter"
 
     A_up: float = 0.00081
     """Factor ``A`` for the up direction."""
@@ -953,7 +952,7 @@ class PowStepDevice(PulsedDevice):
     ..  _Frascaroli et al. (2108): https://www.nature.com/articles/s41598-018-25376-x
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "PowStepResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "PowStepResistiveDeviceParameter"
 
     pow_gamma: float = 1.0
     r"""The value of :math:`\gamma` as explained above.
@@ -1091,7 +1090,7 @@ class PowStepReferenceDevice(PulsedDevice):
     """
 
     bindings_class: ClassVar[
-        Optional[Union[Type, str]]
+        type | str | None
     ] = "PowStepReferenceResistiveDeviceParameter"
 
     pow_gamma: float = 1.0
@@ -1193,9 +1192,9 @@ class PiecewiseStepDevice(PulsedDevice):
 
     """
 
-    bindings_class: ClassVar[Optional[Union[Type, str]]] = "PiecewiseStepResistiveDeviceParameter"
+    bindings_class: ClassVar[type | str | None] = "PiecewiseStepResistiveDeviceParameter"
 
-    piecewise_up: List[float] = field(default_factory=lambda: [1])
+    piecewise_up: list[float] = field(default_factory=lambda: [1])
     r"""Array of values that characterize the update steps in upwards direction.
 
     The values are equally spaced in ``w_min`` and `w_max`` (which
@@ -1215,7 +1214,7 @@ class PiecewiseStepDevice(PulsedDevice):
 
     """
 
-    piecewise_down: List[float] = field(default_factory=lambda: [1])
+    piecewise_down: list[float] = field(default_factory=lambda: [1])
     r"""Array of values that characterize the update steps in downwards direction.
 
     Analogous to ``piecewise_up`` but for the downwards direction.
