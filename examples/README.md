@@ -637,6 +637,14 @@ offset-corrected in-memeory training. ArXiv preprint]: https://arxiv.org/abs/230
 [C. Mackin, et al., "Optimised weight programming for analogue memory-based deep neural
 networks," <em>Nature Communications</em>, 2022.]: https://www.nature.com/articles/s41467-022-31405-1
 
+## Example 36: [`36_6t1c_array_model.py`]
+
+A 5x5 tile that behaves like a measured 6T-1C capacitor-synapse array (fork-specific, CPU only).
+It shows the per-cell gain map, the load law (`load_law`: the step shrinks when more cells are
+written in the same slot) and the line-state half-select model (`hs_mode` 2 for NORMAL opcodes,
+3 for DNO opcodes: a change of the last line that pulsed on a cell pulls it toward the attractor of
+that line pair). The model is described in [`SIXT1C_ARRAY_MODEL.md`](../SIXT1C_ARRAY_MODEL.md).
+
 [`01_simple_layer.py`]: 01_simple_layer.py
 [`02_multiple_layer.py`]: 02_multiple_layer.py
 [`03_minst_training.py`]: 03_minst_training.py
@@ -670,3 +678,4 @@ networks," <em>Nature Communications</em>, 2022.]: https://www.nature.com/articl
 [`31_custom_drift_models.py`]: 31_custom_drift_models.py
 [`32_weight_programming_options.py`]: 32_weight_programming_options.py
 [`33_weight_programming_optimization.py`]: 33_weight_programming_optimization.py
+[`36_6t1c_array_model.py`]: 36_6t1c_array_model.py
