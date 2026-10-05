@@ -30,9 +30,11 @@ BUILD_PULSED_DEVICE_META_PARAMETER(
     bool ls_reverse_up = false;
     bool ls_reverse_down = false;
     T ls_reverse_offset = 0.01;
+    T hs_decay = (T)0.99;
     ,
     /*print body*/
 
+    ss << "\t hs_decay:\t\t\t" << hs_decay << std::endl;
     ss << "\t ls_mult_noise:\t\t\t" << std::boolalpha << ls_mult_noise << std::endl;
     ss << "\t ls_mean_bound_reference:\t" << std::boolalpha << ls_mean_bound_reference << std::endl;
     ss << "\t ls_decrease_up   [rel. decrease at max]: " << ls_decrease_up
@@ -191,10 +193,17 @@ template <typename T> class LinearStepRPUDevice : public PulsedRPUDevice<T> {
   inline T **getSlopeUp() const { return w_slope_up_; };
   inline T **getSlopeDown() const { return w_slope_down_; };
 
+  bool supportsLoadLaw() const override { return true; };
+
   void doSparseUpdate(
       T **weights, int i, const int *x_signed_indices, int x_count, int d_sign, RNG<T> *rng)
       override;
   void doDenseUpdate(T **weights, int *coincidences, RNG<T> *rng) override;
+
+  // HS-aware update method for halfselected pulse types
+  void doSparseUpdateHS(
+      T **weights, int i, const int *x_signed_indices, int x_count, int d_sign, RNG<T> *rng)
+      override;
 
 private:
   T **w_slope_up_ = nullptr;

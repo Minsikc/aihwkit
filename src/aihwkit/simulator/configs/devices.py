@@ -277,6 +277,101 @@ class PulsedDevice(_PrintableMixin):
     Pulses can be obtained by ``analog_tile.tile.get_pulse_counters()``
     """
 
+    hs_mode: int = 0
+    """Half-select array scheme (CPU, halfselected pulse types only).
+
+    ``0`` models a shielded array (DNO opcodes): undriven lines are actively
+    nulled, so half-selected cells receive no ordered-pair drive; only the
+    ``hs_decay`` at coincidences after an HS state flip remains.
+
+    ``1`` models the unshielded array (NORMAL opcodes): every HS state
+    transition of a half-selected cell applies an ordered-pair drive:
+    HS1<->HS2 (potentiating pair) adds ``hs_pair_step_up * scale_up``;
+    HS3<->HS4 (depressing pair) subtracts ``hs_pair_step_down * scale_down``;
+    HS1<->HS3 / HS2<->HS4 (reset-like pair) multiplies the weight by
+    ``hs_reset_decay``; HS1<->HS4 / HS2<->HS3 are inert.
+
+    ``2`` / ``3`` select the line-state model fitted to the 6T-1C array
+    (NORMAL / DNO opcodes), see ``hs_rate``. Modes 0 and 1 are kept for
+    backward compatibility; prefer 2 / 3.
+
+    Requires ``PulseType.HALFSELECTED_STOCHASTIC`` (or ``_STREAM``) and
+    ``analog_tile.tile.enable_hs_tracking()``.
+    """
+
+    hs_pair_step_up: float = 0.133
+    """Potentiating ordered-pair drive per HS transition, in units of the
+    cell's per-pulse up scale (measured 6T1C: ~0.13 of one coincidence)."""
+
+    hs_pair_step_down: float = 0.144
+    """Depressing ordered-pair drive per HS transition, in units of the
+    cell's per-pulse down scale (measured 6T1C: ~0.14 of one coincidence)."""
+
+    hs_reset_decay: float = 0.99
+    """Multiplicative weight decay applied on a reset-like ordered pair
+    (HS1<->HS3 / HS2<->HS4) when ``hs_mode == 1``. ``1.0`` disables it."""
+
+    hs_rate: float = 0.0
+    r"""Line-state half-select (``hs_mode`` 2 = NORMAL opcodes, 3 = DNO opcodes).
+
+    Every cell remembers the last line that pulsed on it (N1 row-POT, N2
+    col-POT, N3 row-DEP, N4 col-DEP). When that line changes, the ordered pair
+    pulls the weight toward its attractor by the fraction ``hs_rate``:
+    :math:`w \leftarrow A + (w - A)(1 - \text{hs\_rate})`.
+
+    * mode 2: N1<->N2 uses ``hs_attr_up``, N3<->N4 ``hs_attr_down``,
+      N1<->N3 / N2<->N4 pull toward 0 (``hs_reset_pairs``, on by default), the rest
+      is inert.
+    * mode 3: rows are always driven (row bit 0 -> complementary line), so the
+      state is N1 / N3 by the row alone and every change decays toward 0.
+
+    Measured on the 6T1C array: 0.0036-0.0042 per transition. Drive sign-pure
+    commands and set ``tile.tile.set_hs_polarity(+1 / -1)`` before each.
+    """
+
+    hs_attr_up: float = 1.0
+    """Attractor of the potentiating pair N1<->N2 (weight units), ``hs_mode`` 2."""
+
+    hs_attr_down: float = -1.0
+    """Attractor of the depressing pair N3<->N4 (weight units), ``hs_mode`` 2."""
+
+    hs_reset_pairs: bool = True
+    """Whether the decay pairs N1<->N3 / N2<->N4 pull toward 0 in ``hs_mode`` 2."""
+
+    load_law: bool = False
+    r"""Load-dependent step (6T1C die-2 array interference law, model M3w).
+
+    In every BL slot a coincident cell's step (scale and slope) is multiplied by
+
+    .. math::
+        f = 1 / (1 + s (a_r (n_{row}-1)^{p_r} + a_c (n_{col}-1) + a_o n_{other}))
+
+    where :math:`n_{row}` / :math:`n_{col}` count the coincidences on the cell's
+    row (d line) / column (x line), :math:`n_{other}` those on neither, and the
+    weak-cell factor is :math:`s = (\bar{g} / g_{ij})^\beta` with :math:`g` the
+    per-cell scale of the update direction. Line counts ignore the pulse sign:
+    drive sign-pure updates to match the hardware. CPU sparse pulse types only
+    (stochastic or half-selected); implemented by :class:`LinearStepDevice`.
+    """
+
+    load_a_row: float = 0.0
+    """Row coefficient :math:`a_r` of ``load_law``."""
+
+    load_p_row: float = 1.0
+    """Row exponent :math:`p_r` of ``load_law``."""
+
+    load_a_col: float = 0.0
+    """Column coefficient :math:`a_c` of ``load_law``."""
+
+    load_a_other: float = 0.0
+    """Coefficient :math:`a_o` of ``load_law`` for coincidences on neither line."""
+
+    load_beta: float = 0.0
+    """Weak-cell exponent :math:`\beta` of ``load_law`` (0 disables the term)."""
+
+    load_dno: bool = False
+    """Count the DNO cross cells (inactive row x active column) as load."""
+
     def as_bindings(self, data_type: RPUDataType) -> Any:
         """Return a representation of this instance as a simulator bindings object."""
         return parameters_to_bindings(self, data_type)
@@ -443,6 +538,17 @@ class LinearStepDevice(PulsedDevice):
     """
 
     bindings_class: ClassVar[Optional[Union[Type, str]]] = "LinearStepResistiveDeviceParameter"
+
+    hs_decay: float = 0.99
+    """Multiplicative weight decay applied to a cross-point when its
+    half-selected state flips during a pulsed update.
+
+    Only used when the update pulse type is one of the half-selected
+    variants (:class:`~aihwkit.simulator.parameters.enums.PulseType`
+    ``HALFSELECTED_STOCHASTIC`` / ``HALFSELECTED_STOCHASTIC_STREAM``) and
+    half-select tracking is enabled on the tile. A value of ``1.0``
+    disables the decay.
+    """
 
     gamma_up: float = 0.0
     r"""The value of :math:`\gamma^+`.

@@ -613,6 +613,26 @@ void RPUPulsed<T>::resetHSStates() {
 }
 
 template <typename T>
+void RPUPulsed<T>::setHSPolarity(int polarity) {
+  CHECK_RPU_DEVICE_INIT;
+  auto* pulsed_device = dynamic_cast<PulsedRPUDeviceBase<T>*>(rpu_device_.get());
+  if (pulsed_device) {
+    pulsed_device->setHSPolarity(polarity);
+  }
+}
+
+// One BL slot in which no line carries a pulse. Only the DNO line-state model
+// reacts to it (every row falls back to its complementary line).
+template <typename T>
+void RPUPulsed<T>::applyHSIdleSlot() {
+  CHECK_RPU_DEVICE_INIT;
+  auto* pulsed_device = dynamic_cast<PulsedRPUDeviceBase<T>*>(rpu_device_.get());
+  if (pulsed_device && pulsed_device->usesHSLineModel()) {
+    pulsed_device->applyHSLineSlot(this->getWeightsPtr(), 1, nullptr, 0, nullptr, 0, nullptr, 0);
+  }
+}
+
+template <typename T>
 bool RPUPulsed<T>::isHSTrackingEnabled() const {
   CHECK_RPU_DEVICE_INIT;
   auto* pulsed_device = dynamic_cast<PulsedRPUDeviceBase<T>*>(rpu_device_.get());

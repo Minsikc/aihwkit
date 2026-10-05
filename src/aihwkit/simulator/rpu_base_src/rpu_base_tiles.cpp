@@ -911,6 +911,17 @@ void declare_rpu_tiles(py::module &m, std::string type_name_add) {
            Reset all halfselected states and transition counters.
            )pbdoc")
       .def(
+          "set_hs_polarity", &ClassPulsed::setHSPolarity, py::arg("polarity"),
+          R"pbdoc(
+           Command polarity for the line-state half-select model (hs_mode 2/3):
+           +1 potentiation (lines N1/N2), -1 depression (N3/N4), 0 infer from the pulse signs.
+           )pbdoc")
+      .def(
+          "apply_hs_idle_slot", &ClassPulsed::applyHSIdleSlot,
+          R"pbdoc(
+           Account for one BL slot without any pulse (matters for hs_mode 3 only).
+           )pbdoc")
+      .def(
           "is_hs_tracking_enabled", &ClassPulsed::isHSTrackingEnabled,
           R"pbdoc(
            Check if halfselected state tracking is enabled.

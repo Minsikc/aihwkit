@@ -260,12 +260,29 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
       bool do_negative_separatly = sblm_->getCountsAndIndices(
           x_counts_p, x_counts_n, d_counts, x_indices_p, x_indices_n, d_indices);
 
+      bool use_load = rpu_device->usesLoadLaw();
+      if (use_load) {
+        rpu_device->prepareLoad();
+      }
+
+      // line-state half-select (hs_mode >= 2) replaces the HS1-4 tracking below
+      bool hs_line = rpu_device->usesHSLineModel() && rpu_device->isHSTrackingEnabled() &&
+                     (up_.pulse_type == PulseType::HalfselectedStochastic ||
+                      up_.pulse_type == PulseType::HalfselectedStochasticStream);
+
       for (int k = 0; k < BL; k++) {
+
+        if (hs_line) {
+          rpu_device->applyHSLineSlot(
+              weights, lr_sign, d_indices[k], d_counts[k], x_indices_p[k], x_counts_p[k],
+              do_negative_separatly ? x_indices_n[k] : nullptr,
+              do_negative_separatly ? x_counts_n[k] : 0);
+        }
 
         // HS tracking: Process all HS states for this time slot k
         if ((up_.pulse_type == PulseType::HalfselectedStochastic ||
              up_.pulse_type == PulseType::HalfselectedStochasticStream) &&
-            rpu_device->isHSTrackingEnabled()) {
+            rpu_device->isHSTrackingEnabled() && !hs_line) {
 
           // Process all rows for HS tracking
           for (int i = 0; i < rpu_device->getDSize(); i++) {
@@ -329,7 +346,9 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
                     continue; // No pulse, keep current state
                   }
 
-                  bool apply_decay = rpu_device->shouldApplyHSDecay(prev_hs, curr_hs);
+                  // Unshielded array (hs_mode 1): the ordered pair of this HS
+                  // transition drives the half-selected cell directly
+                  rpu_device->applyHSPairDrive(weights, i, j, prev_hs, curr_hs);
 
                   // Update transition count and state
                   rpu_device->updateHSTransitionCount(prev_hs, curr_hs, i);
@@ -347,7 +366,7 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
                   HalfSelectedState prev_hs = rpu_device->getHSStates()[i][j];
                   HalfSelectedState curr_hs = (x_sign == d_sign_for_i) ? HalfSelectedState::HS1 : HalfSelectedState::HS3;
 
-                  bool apply_decay = rpu_device->shouldApplyHSDecay(prev_hs, curr_hs);
+                  rpu_device->applyHSPairDrive(weights, i, j, prev_hs, curr_hs);
 
                   rpu_device->updateHSTransitionCount(prev_hs, curr_hs, i);
                   rpu_device->getHSStates()[i][j] = curr_hs;
@@ -365,7 +384,7 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
                     HalfSelectedState prev_hs = rpu_device->getHSStates()[i][j];
                     HalfSelectedState curr_hs = (x_sign == d_sign_for_i) ? HalfSelectedState::HS1 : HalfSelectedState::HS3;
 
-                    bool apply_decay = rpu_device->shouldApplyHSDecay(prev_hs, curr_hs);
+                    rpu_device->applyHSPairDrive(weights, i, j, prev_hs, curr_hs);
 
                     rpu_device->updateHSTransitionCount(prev_hs, curr_hs, i);
                     rpu_device->getHSStates()[i][j] = curr_hs;
@@ -378,6 +397,10 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
 
         // Process weight updates (only for coincidences)
         if (d_counts[k] > 0) {
+          if (use_load) {
+            rpu_device->setSlotLoad(
+                d_counts[k], x_counts_p[k] + (do_negative_separatly ? x_counts_n[k] : 0));
+          }
           for (int ii = 0; ii < d_counts[k]; ii++) {
 
             int i_signed = d_indices[k][ii];
@@ -388,7 +411,7 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
             if (x_counts_p[k] > 0) {
               if ((up_.pulse_type == PulseType::HalfselectedStochastic ||
                    up_.pulse_type == PulseType::HalfselectedStochasticStream) &&
-                  rpu_device->isHSTrackingEnabled()) {
+                  rpu_device->isHSTrackingEnabled() && !hs_line) {
                 // Use virtual HS-aware update method for coincidences
                 rpu_device->doSparseUpdateHS(weights, i, x_indices_p[k], x_counts_p[k], d_sign, &*rng_);
               } else {
@@ -399,7 +422,7 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
               if (x_counts_n[k] > 0) {
                 if ((up_.pulse_type == PulseType::HalfselectedStochastic ||
                      up_.pulse_type == PulseType::HalfselectedStochasticStream) &&
-                    rpu_device->isHSTrackingEnabled()) {
+                    rpu_device->isHSTrackingEnabled() && !hs_line) {
                   // Use virtual HS-aware update method for coincidences
                   rpu_device->doSparseUpdateHS(weights, i, x_indices_n[k], x_counts_n[k], d_sign, &*rng_);
                 } else {
@@ -412,7 +435,7 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
           // Post-update HS state setting for coincidence cells
           if ((up_.pulse_type == PulseType::HalfselectedStochastic ||
                up_.pulse_type == PulseType::HalfselectedStochasticStream) &&
-              rpu_device->isHSTrackingEnabled()) {
+              rpu_device->isHSTrackingEnabled() && !hs_line) {
 
             for (int ii = 0; ii < d_counts[k]; ii++) {
               int i_signed = d_indices[k][ii];
@@ -463,6 +486,9 @@ void PulsedRPUWeightUpdater<T>::updateVectorWithDevice(
     }
   } else {
     // use dense update
+    if (rpu_device->usesLoadLaw()) {
+      RPU_FATAL("load_law needs a sparse pulse type (Stochastic* / Halfselected*).");
+    }
     int *coincidences = dblm_->makeCoincidences(
         x_input, x_inc, x_noz_, d_input, d_inc, d_noz_, &*rng_, pc_learning_rate,
         weight_granularity, up_);

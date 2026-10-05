@@ -90,6 +90,56 @@ template <typename T> struct PulsedRPUDeviceMetaParameter : PulsedRPUDeviceMetaP
   bool apply_write_noise_on_set = true;
   bool count_pulses = false; // whether to count the pulses. Some runtime penalty
 
+  // Half-select array scheme. hs_mode 0 models a shielded array (DNO opcodes:
+  // undriven rows are actively nulled, so half-selected cells feel no pair
+  // drive; only the sign-flip decay at coincidences remains). hs_mode 1 models
+  // the unshielded array (NORMAL opcodes): every HS state transition of a
+  // half-selected cell applies an ordered-pair drive:
+  //   HS1<->HS2 (potentiating pair, N1<->N2): +hs_pair_step_up * scale_up
+  //   HS3<->HS4 (depressing pair, N3<->N4):   -hs_pair_step_down * scale_down
+  //   HS1<->HS3, HS2<->HS4 (reset-like pair): w *= hs_reset_decay
+  //   HS1<->HS4, HS2<->HS3 (inert pairs):     no effect
+  // Steps are in units of the cell's per-pulse scale (measured 6T1C: ~0.13 of
+  // one coincidence per pair). Only active for Halfselected* pulse types with
+  // HS tracking enabled.
+  int hs_mode = 0;
+  T hs_pair_step_up = (T)0.133;
+  T hs_pair_step_down = (T)0.144;
+  T hs_reset_decay = (T)0.99;
+  // Line-state half-select (hs_mode 2: NORMAL opcodes, 3: DNO opcodes). Every
+  // cell remembers the last line that pulsed on it (N1 row-POT, N2 col-POT,
+  // N3 row-DEP, N4 col-DEP); a change of that line pulls the weight toward the
+  // attractor of the ordered pair, w <- A + (w - A) * (1 - hs_rate):
+  //   mode 2: N1<->N2 A = hs_attr_up, N3<->N4 A = hs_attr_down,
+  //           N1<->N3 / N2<->N4 A = 0 (hs_reset_pairs, default on), others inert
+  //   mode 3: rows are always driven (bit 0 -> complementary line), so the
+  //           state is N1 / N3 by the row alone and N1<->N3 decays toward 0
+  // Acts on half-selected cells at the transition itself (no coincidence
+  // needed). Command polarity: setHSPolarity(+1 POT / -1 DEP / 0 infer).
+  T hs_rate = (T)0.0;
+  T hs_attr_up = (T)1.0;
+  T hs_attr_down = (T)-1.0;
+  bool hs_reset_pairs = true;
+
+  // Load-dependent step (array interference law, fitted on the 6T1C die-2
+  // array, model M3w). A coincidence in a BL slot whose row holds n_row
+  // coincidences, whose column holds n_col and with n_other coincidences on
+  // neither line has its step (scale and slope) multiplied by
+  //   f = 1 / (1 + s * (load_a_row * (n_row-1)^load_p_row
+  //                     + load_a_col * (n_col-1) + load_a_other * n_other))
+  // with the weak-cell factor s = (mean(scale) / scale_ij)^load_beta taken over
+  // the scale of the update direction. load_dno adds the DNO cross cells
+  // (inactive row x active column) to the column / other load. Line counts
+  // ignore the pulse sign, so drive sign-pure updates to match the hardware.
+  // Sparse pulse types only (CPU); implemented by LinearStep.
+  bool load_law = false;
+  T load_a_row = (T)0.0;
+  T load_p_row = (T)1.0;
+  T load_a_col = (T)0.0;
+  T load_a_other = (T)0.0;
+  T load_beta = (T)0.0;
+  bool load_dno = false;
+
   void printToStream(std::stringstream &ss) const override;
   using SimpleMetaParameter<T>::print;
   std::string getName() const override { return "PulsedRPUDeviceParameter"; };
@@ -134,6 +184,8 @@ public:
     hs_states_ = nullptr;
     hs_transition_counts_ = nullptr;
     hs_tracking_enabled_ = false;
+    hs_polarity_ = other.hs_polarity_;
+    hs_last_polarity_ = other.hs_last_polarity_;
     if (other.hs_tracking_enabled_) {
       enableHSTracking(); // allocates fresh containers on this (uses d_size_/x_size_)
       for (int i = 0; i < this->d_size_; ++i) {
@@ -165,6 +217,8 @@ public:
     swap(a.hs_states_, b.hs_states_);
     swap(a.hs_transition_counts_, b.hs_transition_counts_);
     swap(a.hs_tracking_enabled_, b.hs_tracking_enabled_);
+    swap(a.hs_polarity_, b.hs_polarity_);
+    swap(a.hs_last_polarity_, b.hs_last_polarity_);
   }
 
   virtual void copyInvertDeviceParameter(const PulsedRPUDeviceBase<T> *rpu_device) {
@@ -254,6 +308,29 @@ public:
       int i, const int *x_signed_indices, int x_count, int d_sign, bool x_pulse_exists, bool d_pulse_exists);
   void updateHSTransitionCount(HalfSelectedState prev_hs, HalfSelectedState curr_hs, int d_idx);
   bool shouldApplyHSDecay(HalfSelectedState prev_hs, HalfSelectedState curr_hs) const;
+  // Applies the unshielded (hs_mode 1) ordered-pair drive to a half-selected
+  // cell on an HS state transition. No-op by default (devices without bounds/
+  // scale containers); PulsedRPUDevice implements it generically.
+  virtual void applyHSPairDrive(
+      T ** /*weights*/, int /*i*/, int /*j*/, HalfSelectedState /*prev_hs*/,
+      HalfSelectedState /*curr_hs*/) {};
+  // Load-dependent step (see load_law): prepareLoad is called once per update,
+  // setSlotLoad once per BL slot with that slot's active d (row) and x (column)
+  // line counts, before the coincidences of the slot are applied.
+  // Line-state half-select (hs_mode >= 2): one call per BL slot BEFORE the
+  // coincidences of the slot are applied, with that slot's signed pulse indices.
+  virtual bool usesHSLineModel() const { return false; };
+  virtual void applyHSLineSlot(
+      T ** /*weights*/, int /*lr_sign*/, const int * /*d_indices*/, int /*d_count*/,
+      const int * /*x_indices_p*/, int /*x_count_p*/, const int * /*x_indices_n*/,
+      int /*x_count_n*/) {};
+  // state every cell starts from (line-state modes start from "no line yet")
+  virtual HalfSelectedState initialHSState() const { return HalfSelectedState::HS1; };
+  inline void setHSPolarity(int polarity) { hs_polarity_ = polarity; };
+  inline int getHSPolarity() const { return hs_polarity_; };
+  virtual bool usesLoadLaw() const { return false; };
+  virtual void prepareLoad() {};
+  virtual void setSlotLoad(int /*d_count*/, int /*x_count*/) {};
 
 protected:
   inline void setWeightGranularity(T weight_granularity) {
@@ -277,6 +354,8 @@ protected:
   HalfSelectedState **hs_states_ = nullptr;        // Current HS state for each synapse
   int **hs_transition_counts_ = nullptr;           // 16 transition counters (HS1->HS1, HS1->HS2, etc.)
   bool hs_tracking_enabled_ = false;
+  int hs_polarity_ = 0;      // +1 potentiation command, -1 depression, 0 infer from the pulse signs
+  int hs_last_polarity_ = 1; // last inferred polarity
 
 private:
   T weight_granularity_ = 0.0;
@@ -334,6 +413,22 @@ public:
   inline T **getScaleUp() const { return w_scale_up_; };
   inline T **getScaleDown() const { return w_scale_down_; };
 
+  void applyHSPairDrive(
+      T **weights, int i, int j, HalfSelectedState prev_hs, HalfSelectedState curr_hs) override;
+
+  bool usesHSLineModel() const override { return getPar().hs_mode >= 2; };
+  void applyHSLineSlot(
+      T **weights, int lr_sign, const int *d_indices, int d_count, const int *x_indices_p,
+      int x_count_p, const int *x_indices_n, int x_count_n) override;
+  HalfSelectedState initialHSState() const override {
+    return getPar().hs_mode >= 2 ? HalfSelectedState::HS0 : HalfSelectedState::HS1;
+  };
+  bool usesLoadLaw() const override { return getPar().load_law; };
+  void prepareLoad() override;
+  void setSlotLoad(int d_count, int x_count) override;
+  // devices whose sparse update applies loadFactor() override this
+  virtual bool supportsLoadLaw() const { return false; };
+
   PulsedRPUDeviceMetaParameter<T> &getPar() const override {
     return static_cast<PulsedRPUDeviceMetaParameter<T> &>(SimpleRPUDevice<T>::getPar());
   };
@@ -371,6 +466,18 @@ protected:
 
   RealWorldRNG<T> write_noise_rng_{0};
   virtual void applyUpdateWriteNoise(T **weights);
+
+  // per-slot load state (rebuilt by prepareLoad / setSlotLoad on every update)
+  bool load_active_ = false;
+  T load_L_ = (T)0.0;
+  std::vector<T> load_s_up_;
+  std::vector<T> load_s_down_;
+  // step multiplier of cell (i,j) in the current slot; sign > 0 = down (as in the update loops)
+  inline T loadFactor(int i, int j, int sign) const {
+    int idx = i * this->x_size_ + j;
+    T s = sign > 0 ? load_s_down_[idx] : load_s_up_[idx];
+    return (T)1.0 / ((T)1.0 + s * load_L_);
+  };
 
 private:
   void freeContainers();

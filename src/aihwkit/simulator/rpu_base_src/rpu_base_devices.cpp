@@ -574,6 +574,21 @@ template <typename T> void declare_rpu_devices(py::module &m, std::string type_n
       .def_readwrite("w_min", &PulsedParam::w_min)
       .def_readwrite("w_min_dtod", &PulsedParam::w_min_dtod)
       .def_readwrite("count_pulses", &PulsedParam::count_pulses)
+      .def_readwrite("hs_mode", &PulsedParam::hs_mode)
+      .def_readwrite("hs_pair_step_up", &PulsedParam::hs_pair_step_up)
+      .def_readwrite("hs_pair_step_down", &PulsedParam::hs_pair_step_down)
+      .def_readwrite("hs_reset_decay", &PulsedParam::hs_reset_decay)
+      .def_readwrite("hs_rate", &PulsedParam::hs_rate)
+      .def_readwrite("hs_attr_up", &PulsedParam::hs_attr_up)
+      .def_readwrite("hs_attr_down", &PulsedParam::hs_attr_down)
+      .def_readwrite("hs_reset_pairs", &PulsedParam::hs_reset_pairs)
+      .def_readwrite("load_law", &PulsedParam::load_law)
+      .def_readwrite("load_a_row", &PulsedParam::load_a_row)
+      .def_readwrite("load_p_row", &PulsedParam::load_p_row)
+      .def_readwrite("load_a_col", &PulsedParam::load_a_col)
+      .def_readwrite("load_a_other", &PulsedParam::load_a_other)
+      .def_readwrite("load_beta", &PulsedParam::load_beta)
+      .def_readwrite("load_dno", &PulsedParam::load_dno)
       .def("__str__", [](PulsedParam &self) {
         std::stringstream ss;
         self.printToStream(ss);
@@ -603,6 +618,7 @@ template <typename T> void declare_rpu_devices(py::module &m, std::string type_n
   py::class_<LinearStepParam, PyLinearStepParam, PulsedParam>(
       m, NAME("LinearStepResistiveDeviceParameter"))
       .def(py::init<>())
+      .def_readwrite("hs_decay", &LinearStepParam::hs_decay)
       .def_readwrite("gamma_up", &LinearStepParam::ls_decrease_up)
       .def_readwrite("gamma_down", &LinearStepParam::ls_decrease_down)
       .def_readwrite("gamma_up_dtod", &LinearStepParam::ls_decrease_up_dtod)

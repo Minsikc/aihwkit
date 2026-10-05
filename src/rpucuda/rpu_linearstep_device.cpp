@@ -180,6 +180,24 @@ void LinearStepRPUDevice<T>::doSparseUpdate(
   T *max_bound = this->w_max_bound_[i];
 
   T write_noise_std = par.getScaledWriteNoise();
+  if (this->load_active_) {
+    auto loaded = [&](int j, int sign) {
+      T f = this->loadFactor(i, j, sign);
+      T sd = f * scale_down[j], su = f * scale_up[j];
+      T kd = f * slope_down[j], ku = f * slope_up[j];
+      if (par.ls_mult_noise) {
+        update_once_mult(
+            w[j], w_apparent[j], sign, sd, su, kd, ku, min_bound[j], max_bound[j],
+            par.dw_min_std, write_noise_std, rng);
+      } else {
+        update_once_add(
+            w[j], w_apparent[j], sign, sd, su, kd, ku, min_bound[j], max_bound[j],
+            par.dw_min_std, write_noise_std, rng);
+      }
+    };
+    PULSED_UPDATE_W_LOOP(loaded(j, sign););
+    return;
+  }
   if (par.ls_mult_noise) {
     PULSED_UPDATE_W_LOOP(update_once_mult(
                              w[j], w_apparent[j], sign, scale_down[j], scale_up[j], slope_down[j],
@@ -190,6 +208,71 @@ void LinearStepRPUDevice<T>::doSparseUpdate(
                              w[j], w_apparent[j], sign, scale_down[j], scale_up[j], slope_down[j],
                              slope_up[j], min_bound[j], max_bound[j], par.dw_min_std,
                              write_noise_std, rng););
+  }
+}
+
+// HS-aware update: same pulse response as doSparseUpdate, but a coincidence
+// arriving on a sign-flipped / pulse-type-flipped HS state first decays the
+// weight by hs_decay (mirrors ConstantStepRPUDevice::doSparseUpdateHS)
+template <typename T>
+void LinearStepRPUDevice<T>::doSparseUpdateHS(
+    T **weights, int i, const int *x_signed_indices, int x_count, int d_sign, RNG<T> *rng) {
+
+  const auto &par = getPar();
+
+  T *scale_down = this->w_scale_down_[i];
+  T *scale_up = this->w_scale_up_[i];
+  T *slope_down = w_slope_down_[i];
+  T *slope_up = w_slope_up_[i];
+  T *w = par.usesPersistentWeight() ? this->w_persistent_[i] : weights[i];
+  T *w_apparent = weights[i];
+  T *min_bound = this->w_min_bound_[i];
+  T *max_bound = this->w_max_bound_[i];
+
+  T write_noise_std = par.getScaledWriteNoise();
+  if (this->load_active_) {
+    auto loaded = [&](int j, int sign) {
+      T f = this->loadFactor(i, j, sign);
+      T sd = f * scale_down[j], su = f * scale_up[j];
+      T kd = f * slope_down[j], ku = f * slope_up[j];
+      if (par.ls_mult_noise) {
+        update_once_mult(
+            w[j], w_apparent[j], sign, sd, su, kd, ku, min_bound[j], max_bound[j],
+            par.dw_min_std, write_noise_std, rng);
+      } else {
+        update_once_add(
+            w[j], w_apparent[j], sign, sd, su, kd, ku, min_bound[j], max_bound[j],
+            par.dw_min_std, write_noise_std, rng);
+      }
+    };
+    PULSED_UPDATE_W_LOOP_HS(
+        loaded(j, sign);,
+        if (this->shouldApplyHSDecay(prev_hs, curr_hs)) { w[j] *= par.hs_decay; }
+        loaded(j, sign););
+    return;
+  }
+  if (par.ls_mult_noise) {
+    PULSED_UPDATE_W_LOOP_HS(
+        update_once_mult(
+            w[j], w_apparent[j], sign, scale_down[j], scale_up[j], slope_down[j], slope_up[j],
+            min_bound[j], max_bound[j], par.dw_min_std, write_noise_std, rng);,
+
+        if (this->shouldApplyHSDecay(prev_hs, curr_hs)) { w[j] *= par.hs_decay; }
+        update_once_mult(
+            w[j], w_apparent[j], sign, scale_down[j], scale_up[j], slope_down[j], slope_up[j],
+            min_bound[j], max_bound[j], par.dw_min_std, write_noise_std, rng);
+    );
+  } else {
+    PULSED_UPDATE_W_LOOP_HS(
+        update_once_add(
+            w[j], w_apparent[j], sign, scale_down[j], scale_up[j], slope_down[j], slope_up[j],
+            min_bound[j], max_bound[j], par.dw_min_std, write_noise_std, rng);,
+
+        if (this->shouldApplyHSDecay(prev_hs, curr_hs)) { w[j] *= par.hs_decay; }
+        update_once_add(
+            w[j], w_apparent[j], sign, scale_down[j], scale_up[j], slope_down[j], slope_up[j],
+            min_bound[j], max_bound[j], par.dw_min_std, write_noise_std, rng);
+    );
   }
 }
 

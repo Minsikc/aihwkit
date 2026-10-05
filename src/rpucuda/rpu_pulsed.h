@@ -103,6 +103,8 @@ public:
   void enableHSTracking();
   void disableHSTracking();
   void resetHSStates();
+  void setHSPolarity(int polarity);
+  void applyHSIdleSlot();
   bool isHSTrackingEnabled() const;
   void getHSTransitionCounts(std::vector<int> &counts) const;
 

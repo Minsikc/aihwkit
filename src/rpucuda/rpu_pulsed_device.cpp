@@ -67,6 +67,27 @@ void PulsedRPUDeviceMetaParameter<T>::printToStream(std::stringstream &ss) const
          << std::endl;
     }
 
+    if (hs_mode >= 2) {
+      ss << "\t hs_mode:\t\t" << hs_mode << (hs_mode == 3 ? " (line-state, DNO)" : " (line-state, NORMAL)")
+         << std::endl;
+      ss << "\t hs_rate:\t\t" << hs_rate << std::endl;
+      if (hs_mode == 2) {
+        ss << "\t hs_attr_up/down:\t" << hs_attr_up << " / " << hs_attr_down
+           << (hs_reset_pairs ? " (+ reset pairs)" : "") << std::endl;
+      }
+    } else if (hs_mode != 0) {
+      ss << "\t hs_mode:\t\t" << hs_mode << " (unshielded half-select)" << std::endl;
+      ss << "\t hs_pair_step_up:\t" << hs_pair_step_up << std::endl;
+      ss << "\t hs_pair_step_down:\t" << hs_pair_step_down << std::endl;
+      ss << "\t hs_reset_decay:\t" << hs_reset_decay << std::endl;
+    }
+
+    if (load_law) {
+      ss << "\t load_law:\t\t a_row " << load_a_row << ", p_row " << load_p_row << ", a_col "
+         << load_a_col << ", a_other " << load_a_other << ", beta " << load_beta
+         << (load_dno ? ", DNO" : "") << std::endl;
+    }
+
     if (this->drift.nu > (T)0.0) {
       this->drift.printToStream(ss);
     }
@@ -800,9 +821,10 @@ template <typename T> void PulsedRPUDeviceBase<T>::freeHSContainers() {
 
 template <typename T> void PulsedRPUDeviceBase<T>::resetHSStates() {
   if (hs_states_) {
+    const HalfSelectedState init = this->initialHSState();
     for (int i = 0; i < this->d_size_; i++) {
       for (int j = 0; j < this->x_size_; j++) {
-        hs_states_[i][j] = HalfSelectedState::HS1;
+        hs_states_[i][j] = init;
       }
       for (int k = 0; k < 16; k++) {
         hs_transition_counts_[i][k] = 0;
@@ -911,6 +933,182 @@ void PulsedRPUDeviceBase<T>::updateHSStateOnly(
       hs_states_[i][j] = curr_hs;
     }
   }
+}
+
+template <typename T>
+void PulsedRPUDevice<T>::applyHSPairDrive(
+    T **weights, int i, int j, HalfSelectedState prev_hs, HalfSelectedState curr_hs) {
+
+  const auto &par = getPar();
+  if (par.hs_mode != 1 || prev_hs == curr_hs) {
+    return;
+  }
+  using HS = HalfSelectedState;
+  T *w = par.usesPersistentWeight() ? this->w_persistent_[i] : weights[i];
+
+  if ((prev_hs == HS::HS1 && curr_hs == HS::HS2) || (prev_hs == HS::HS2 && curr_hs == HS::HS1)) {
+    // potentiating ordered pair (N1<->N2)
+    w[j] += par.hs_pair_step_up * this->w_scale_up_[i][j];
+  } else if (
+      (prev_hs == HS::HS3 && curr_hs == HS::HS4) || (prev_hs == HS::HS4 && curr_hs == HS::HS3)) {
+    // depressing ordered pair (N3<->N4)
+    w[j] -= par.hs_pair_step_down * this->w_scale_down_[i][j];
+  } else if (
+      (prev_hs == HS::HS1 && curr_hs == HS::HS3) || (prev_hs == HS::HS3 && curr_hs == HS::HS1) ||
+      (prev_hs == HS::HS2 && curr_hs == HS::HS4) || (prev_hs == HS::HS4 && curr_hs == HS::HS2)) {
+    // reset-like ordered pair (N1<->N3 / N2<->N4): state-dependent pull toward 0
+    w[j] *= par.hs_reset_decay;
+  } else {
+    // inert pairs (HS1<->HS4, HS2<->HS3)
+    return;
+  }
+  w[j] = MIN(w[j], this->w_max_bound_[i][j]);
+  w[j] = MAX(w[j], this->w_min_bound_[i][j]);
+  if (par.usesPersistentWeight()) {
+    weights[i][j] = w[j];
+  }
+}
+
+template <typename T>
+void PulsedRPUDevice<T>::applyHSLineSlot(
+    T **weights, int lr_sign, const int *d_indices, int d_count, const int *x_indices_p,
+    int x_count_p, const int *x_indices_n, int x_count_n) {
+
+  const auto &par = getPar();
+  if (par.hs_mode < 2 || !this->hs_tracking_enabled_) {
+    return;
+  }
+  const bool dno = par.hs_mode == 3;
+  const int x_count = x_count_p + x_count_n;
+  if (!dno && d_count == 0 && x_count == 0) {
+    return; // idle slot: no line fires, every state is kept
+  }
+
+  // command polarity: weights go up when the x and d pulse signs differ
+  int pol = this->hs_polarity_;
+  if (pol == 0) {
+    if (d_count > 0 && x_count > 0) {
+      int d_sign = d_indices[0] < 0 ? -lr_sign : lr_sign;
+      int x_first = x_count_p > 0 ? x_indices_p[0] : x_indices_n[0];
+      this->hs_last_polarity_ = ((x_first < 0 ? -d_sign : d_sign) > 0) ? -1 : 1;
+    }
+    pol = this->hs_last_polarity_;
+  }
+  const int row_line = pol > 0 ? 1 : 3; // N1 / N3
+  const int col_line = pol > 0 ? 2 : 4; // N2 / N4
+  const int row_off = 4 - row_line;     // DNO: complementary row line (N3 / N1)
+
+  std::vector<char> row_on(this->d_size_, 0), col_on(this->x_size_, 0);
+  for (int ii = 0; ii < d_count; ii++) {
+    int s = d_indices[ii];
+    row_on[s < 0 ? -s - 1 : s - 1] = 1;
+  }
+  for (int jj = 0; jj < x_count_p; jj++) {
+    int s = x_indices_p[jj];
+    col_on[s < 0 ? -s - 1 : s - 1] = 1;
+  }
+  for (int jj = 0; jj < x_count_n; jj++) {
+    int s = x_indices_n[jj];
+    col_on[s < 0 ? -s - 1 : s - 1] = 1;
+  }
+
+  const bool persistent = par.usesPersistentWeight();
+  const T keep = (T)1.0 - par.hs_rate;
+  for (int i = 0; i < this->d_size_; i++) {
+    T *w = persistent ? this->w_persistent_[i] : weights[i];
+    for (int j = 0; j < this->x_size_; j++) {
+      const int prev = static_cast<int>(this->hs_states_[i][j]);
+      int curr;
+      if (dno) {
+        curr = row_on[i] ? row_line : row_off;
+      } else {
+        curr = row_on[i] ? row_line : (col_on[j] ? col_line : prev);
+      }
+      if (curr == prev) {
+        continue;
+      }
+      this->hs_states_[i][j] = static_cast<HalfSelectedState>(curr);
+      if (prev == 0) {
+        continue; // first line after a reset: no pair yet
+      }
+      this->updateHSTransitionCount(
+          static_cast<HalfSelectedState>(prev), static_cast<HalfSelectedState>(curr), i);
+      const int lo = prev < curr ? prev : curr, hi = prev < curr ? curr : prev;
+      T attr;
+      if (lo == 1 && hi == 3) {
+        if (!dno && !par.hs_reset_pairs) {
+          continue;
+        }
+        attr = (T)0.0;
+      } else if (dno) {
+        continue;
+      } else if (lo == 1 && hi == 2) {
+        attr = par.hs_attr_up;
+      } else if (lo == 3 && hi == 4) {
+        attr = par.hs_attr_down;
+      } else if (lo == 2 && hi == 4 && par.hs_reset_pairs) {
+        attr = (T)0.0;
+      } else {
+        continue; // inert pairs N1<->N4, N2<->N3
+      }
+      w[j] = attr + (w[j] - attr) * keep;
+      w[j] = MIN(w[j], this->w_max_bound_[i][j]);
+      w[j] = MAX(w[j], this->w_min_bound_[i][j]);
+      if (persistent) {
+        weights[i][j] = w[j];
+      }
+    }
+  }
+}
+
+template <typename T> void PulsedRPUDevice<T>::prepareLoad() {
+
+  const auto &par = getPar();
+  load_active_ = false;
+  if (!par.load_law) {
+    return;
+  }
+  if (!supportsLoadLaw()) {
+    RPU_FATAL("load_law is not implemented for this device (use LinearStep).");
+  }
+  int n = this->d_size_ * this->x_size_;
+  load_s_up_.resize(n);
+  load_s_down_.resize(n);
+  T mean_up = (T)0.0, mean_down = (T)0.0;
+  for (int k = 0; k < n; k++) {
+    mean_up += (T)fabsf(w_scale_up_[0][k]);
+    mean_down += (T)fabsf(w_scale_down_[0][k]);
+  }
+  mean_up /= (T)n;
+  mean_down /= (T)n;
+  for (int k = 0; k < n; k++) {
+    T su = (T)fabsf(w_scale_up_[0][k]);
+    T sd = (T)fabsf(w_scale_down_[0][k]);
+    load_s_up_[k] = su > (T)0.0 ? (T)powf(mean_up / su, par.load_beta) : (T)1.0;
+    load_s_down_[k] = sd > (T)0.0 ? (T)powf(mean_down / sd, par.load_beta) : (T)1.0;
+  }
+}
+
+template <typename T> void PulsedRPUDevice<T>::setSlotLoad(int d_count, int x_count) {
+
+  const auto &par = getPar();
+  if (!par.load_law) {
+    load_active_ = false;
+    return;
+  }
+  // every active row coincides with every active column in a slot
+  T n_row = (T)x_count;
+  T n_col = (T)d_count;
+  T n_other = (T)(d_count * x_count - x_count - d_count + 1);
+  if (par.load_dno) {
+    T inactive_rows = (T)(this->d_size_ - d_count);
+    n_col += inactive_rows;
+    n_other += inactive_rows * (T)(x_count - 1);
+  }
+  T row_excess = MAX(n_row - (T)1.0, (T)0.0);
+  load_L_ = par.load_a_row * (T)powf(row_excess, par.load_p_row) +
+            par.load_a_col * (n_col - (T)1.0) + par.load_a_other * n_other;
+  load_active_ = true;
 }
 
 template class PulsedRPUDeviceBase<float>;
